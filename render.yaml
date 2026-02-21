@@ -33,8 +33,9 @@ services:
       - key: ADMIN_SETUP_TOKEN
         sync: false
 
-  - type: static_site
+  - type: web
     name: simple-anonymous-scheduler-web
+    env: static
     rootDir: client
     buildCommand: npm install && npm run build
     staticPublishPath: build
