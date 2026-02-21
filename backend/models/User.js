@@ -1,24 +1,45 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const { sequelize } = require('../config/database');
 
-const userSchema = new mongoose.Schema(
-  {
-    username: { type: String, required: true, unique: true, trim: true },
-    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    password: { type: String, required: true },
-    isVerified: { type: Boolean, default: false },
-    verificationToken: String,
-    googleAccessToken: String,
-    googleRefreshToken: String,
-    shareAvailability: { type: Boolean, default: false },
-    availabilityWindows: [
-      {
-        dayOfWeek: { type: Number, min: 0, max: 6, required: true },
-        startTime: { type: String, required: true },
-        endTime: { type: String, required: true },
-      },
-    ],
+const User = sequelize.define('User', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true
   },
-  { timestamps: true }
-);
+  username: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true
+  },
+  email: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true,
+    validate: { isEmail: true }
+  },
+  password: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  isVerified: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  verificationToken: DataTypes.STRING,
+  googleAccessToken: DataTypes.TEXT,
+  googleRefreshToken: DataTypes.TEXT,
+  shareAvailability: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  availabilityWindows: {
+    type: DataTypes.JSONB,
+    defaultValue: []
+  }
+}, {
+  timestamps: true,
+  tableName: 'users'
+});
 
-module.exports = mongoose.model('User', userSchema);
+module.exports = User;

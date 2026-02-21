@@ -1,72 +1,90 @@
 # SimpleAnonymousScheduler
 
-Full-stack meeting scheduler with anonymous invite flow, email notifications, and Google Calendar integration.
+A full-stack scheduling application built with React and Node.js that helps users coordinate meeting times anonymously.
 
 ## Stack
-- Backend: Node.js, Express, MongoDB (Mongoose), JWT, Nodemailer, Google APIs
-- Frontend: React, React Router, Axios
-- Deployment: Render (Backend Web Service + Frontend Static Site) and MongoDB Atlas
+
+- **Backend:** Node.js, Express, PostgreSQL (Sequelize), JWT, Nodemailer, Google APIs
+- **Frontend:** React, React Router, Axios
+- **Deployment:** Render.com (Web Service + Static Site + Managed Postgres)
 
 ## Prerequisites
-- Node.js 18+
-- MongoDB Atlas cluster
-- Google Cloud OAuth credentials (Calendar API enabled)
-- Email provider credentials (Gmail app password or SendGrid SMTP)
 
-## Quick Start
-1. Install dependencies:
+- Node.js 18+
+- PostgreSQL (local development) or Render managed Postgres (production)
+- Gmail account (for sending emails via Nodemailer)
+- Google Cloud Project with Calendar API enabled
+- Render.com account
+
+## Quick Start (Local)
+
+1. **Clone and install:**
    ```bash
+   git clone <repo-url>
+   cd SimpleSchedulerSite
    npm install
-   npm install --prefix backend
-   npm install --prefix client
+   cd backend && npm install
+   cd ../client && npm install
+   cd ..
    ```
-2. Configure env files:
+
+2. **Set up local PostgreSQL:**
+   ```bash
+   createdb scheduler
+   ```
+
+3. **Configure backend environment:**
    - Copy `backend/.env.example` to `backend/.env`
+   - Set `DATABASE_URL=postgres://localhost:5432/scheduler`
+   - Set `JWT_SECRET` to a secure random string
+   - Configure email credentials (`EMAIL_USER`, `EMAIL_PASS`)
+   - Add Google OAuth credentials (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`)
+   - Set `FRONTEND_URL=http://localhost:3000`
+   - Set `BACKEND_URL=http://localhost:5000`
+
+4. **Configure frontend environment:**
    - Copy `client/.env.example` to `client/.env`
-3. Run locally:
+   - Set `REACT_APP_API_URL=http://localhost:5000/api`
+
+5. **Run the app:**
    ```bash
    npm start
    ```
+   This runs both backend (port 5000) and frontend (port 3000) concurrently.
+   The backend will automatically create database tables on first run.
 
 - Backend: http://localhost:5000
 - Frontend: http://localhost:3000
 
-## Render Deployment
-### Backend Web Service
-- Root directory: `backend`
-- Build command: `npm install`
-- Start command: `npm start`
-- Set environment variables from `backend/.env.example`
-- Include `ADMIN_SETUP_TOKEN` for first deploy bootstrap
+## Deploy to Render
 
-### Frontend Static Site
-- Root directory: `client`
-- Build command: `npm install && npm run build`
-- Publish directory: `build`
-- Set `REACT_APP_API_URL` to your deployed backend URL + `/api`
+This project includes a `render.yaml` blueprint for **fully managed one-click deployment** with Render Postgres.
 
-## Root Admin Utility Page
-- URL: `https://<your-backend-service>.onrender.com/`
-- Purpose:
-  - Service health + config visibility (`/api/admin/health`)
-  - Public frontend branding/preferences feed (`/api/admin/public-settings`)
-  - First-time bootstrap for admin settings token (`/api/admin/bootstrap`)
-  - Runtime app settings updates (`/api/admin/settings`)
+1. Push your code to a Git repository (GitHub, GitLab, etc.)
+2. In Render Dashboard, click **New > Blueprint**
+3. Connect your repository
+4. Render will:
+   - Provision a managed PostgreSQL database
+   - Auto-wire `DATABASE_URL` from the database to the backend
+   - Auto-generate `JWT_SECRET`
+   - Prompt only for external secrets:
+     - `EMAIL_USER` / `EMAIL_PASS`: Gmail SMTP credentials
+     - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI`: Google OAuth credentials (set redirect URI to `https://<your-backend>.onrender.com/api/auth/google/callback`)
+5. Deploy and wait for all services to go live
+6. Database tables will be created automatically on first backend startup
 
-### First Deploy Setup (Render)
-1. In Render backend environment variables, set `ADMIN_SETUP_TOKEN` to a strong temporary value.
-2. Deploy backend.
-3. Open backend root URL (`/`) and run **First Deploy Bootstrap** using that setup token.
-4. Save the returned **admin token** in your password manager.
-5. Use that admin token on the same page to load/update settings (logo URL, template text, date format, timezone, support email).
-6. Rotate/remove `ADMIN_SETUP_TOKEN` in Render after bootstrap to reduce risk.
+## Features
 
-## Dynamic Frontend Settings
-The React app loads runtime settings from `/api/admin/public-settings` and uses them for:
-- Company name + logo on auth/dashboard/calendar screens
-- Template text on auth/dashboard
-- Date format + timezone in meeting and calendar timestamps
-- Support email footer hints
+- User registration and email verification
+- JWT-based authentication
+- Google Calendar integration (OAuth2)
+- Meeting creation with attendee emails
+- Propose and approve meeting times
+- Availability preferences (opt-in weekly time windows)
+- Proposed times validated against shared availability
+- In-meeting messaging
+- Meeting rescheduling
+- Calendar busy slots view
 
 ## Notes
 - Google Meet links are user-provided when creating a meeting.

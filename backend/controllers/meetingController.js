@@ -13,8 +13,8 @@ function isObjectIdEqual(a, b) {
 
 function isParticipant(meeting, userId) {
   return (
-    isObjectIdEqual(meeting.creator, userId) ||
-    meeting.attendees.some((id) => isObjectIdEqual(id, userId))
+    isObjectIdEqual(meeting.creatorId, userId) ||
+    meeting.attendeeIds.some((id) => isObjectIdEqual(id, userId))
   );
 }
 
@@ -60,7 +60,7 @@ async function sendSimpleEmail(to, subject, text) {
 }
 
 async function addToCalendarForCreator(meeting) {
-  const creator = await User.findById(meeting.creator);
+  const creator = await User.findByPk(meeting.creatorId);
   if (!creator || !creator.googleAccessToken) {
     return;
   }
@@ -72,7 +72,10 @@ async function addToCalendarForCreator(meeting) {
   });
 
   const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-  const attendees = await User.find({ _id: { $in: meeting.attendees } }, { email: 1 });
+  const attendees = await User.findAll({ 
+    where: { id: meeting.attendeeIds },
+    attributes: ['email']
+  });
 
   const event = {
     summary: meeting.title,
@@ -96,11 +99,16 @@ async function addToCalendarForCreator(meeting) {
 
 exports.listMeetings = async (req, res) => {
   try {
-    const meetings = await Meeting.find({
-      $or: [{ creator: req.user.id }, { attendees: req.user.id }],
-    })
-      .populate('creator', 'username email')
-      .sort({ updatedAt: -1 });
+    const { Op } = require('sequelize');
+    const meetings = await Meeting.findAll({
+      where: {
+        [Op.or]: [
+          { creatorId: req.user.id },
+          { attendeeIds: { [Op.contains]: [req.user.id] } }
+        ]
+      },
+      order: [['updatedAt', 'DESC']]
+    });
 
     return res.json(meetings);
   } catch (err) {
@@ -110,10 +118,8 @@ exports.listMeetings = async (req, res) => {
 
 exports.getMeeting = async (req, res) => {
   try {
-    const meeting = await Meeting.findById(req.params.id)
-      .populate('creator', 'username email')
-      .populate('attendees', 'username email')
-      .populate('messages.user', 'username');
+    const { Op } = require('sequelize');
+    const meeting = await Meeting.findByPk(req.params.id);
 
     if (!meeting) {
       return res.status(404).json({ msg: 'Meeting not found' });
@@ -123,19 +129,22 @@ exports.getMeeting = async (req, res) => {
       return res.status(403).json({ msg: 'Not authorized for this meeting' });
     }
 
-    const participantIds = [meeting.creator._id, ...meeting.attendees.map((attendee) => attendee._id)];
-    const sharedUsers = await User.find(
-      {
-        _id: { $in: participantIds },
-        shareAvailability: true,
-        'availabilityWindows.0': { $exists: true },
+    const participantIds = [meeting.creatorId, ...meeting.attendeeIds];
+    const sharedUsers = await User.findAll({
+      where: {
+        id: { [Op.in]: participantIds },
+        shareAvailability: true
       },
-      'username email availabilityWindows'
+      attributes: ['id', 'username', 'email', 'availabilityWindows']
+    });
+
+    const filtered = sharedUsers.filter(u => 
+      Array.isArray(u.availabilityWindows) && u.availabilityWindows.length > 0
     );
 
-    const meetingData = meeting.toObject();
-    meetingData.sharedAvailability = sharedUsers.map((user) => ({
-      userId: user._id,
+    const meetingData = meeting.toJSON();
+    meetingData.sharedAvailability = filtered.map((user) => ({
+      userId: user.id,
       username: user.username,
       email: user.email,
       availabilityWindows: user.availabilityWindows,
@@ -155,22 +164,24 @@ exports.createMeeting = async (req, res) => {
       return res.status(400).json({ msg: 'Meeting title is required' });
     }
 
-    const attendees = await User.find({ email: { $in: attendeesEmails } });
-    const meeting = new Meeting({
+    const { Op } = require('sequelize');
+    const attendees = await User.findAll({ 
+      where: { email: { [Op.in]: attendeesEmails } }
+    });
+    
+    const meeting = await Meeting.create({
       title,
-      creator: req.user.id,
-      attendees: attendees.map((u) => u._id),
+      creatorId: req.user.id,
+      attendeeIds: attendees.map((u) => u.id),
       googleMeetLink,
     });
-
-    await meeting.save();
 
     await Promise.all(
       attendees.map((attendee) =>
         sendSimpleEmail(
           attendee.email,
           `New meeting invitation: ${title}`,
-          `You were invited to a meeting in SimpleAnonymousScheduler.\nMeeting ID: ${meeting._id}`
+          `You were invited to a meeting in SimpleAnonymousScheduler.\nMeeting ID: ${meeting.id}`
         )
       )
     );
@@ -189,7 +200,8 @@ exports.proposeTime = async (req, res) => {
       return res.status(400).json({ msg: 'Invalid proposed time' });
     }
 
-    const meeting = await Meeting.findById(req.params.id);
+    const { Op } = require('sequelize');
+    const meeting = await Meeting.findByPk(req.params.id);
 
     if (!meeting) {
       return res.status(404).json({ msg: 'Meeting not found' });
@@ -199,14 +211,14 @@ exports.proposeTime = async (req, res) => {
       return res.status(403).json({ msg: 'Not authorized' });
     }
 
-    const participantIds = [meeting.creator, ...meeting.attendees];
-    const sharedUsers = await User.find(
-      {
-        _id: { $in: participantIds },
-        shareAvailability: true,
+    const participantIds = [meeting.creatorId, ...meeting.attendeeIds];
+    const sharedUsers = await User.findAll({
+      where: {
+        id: { [Op.in]: participantIds },
+        shareAvailability: true
       },
-      'username availabilityWindows shareAvailability'
-    );
+      attributes: ['username', 'availabilityWindows', 'shareAvailability']
+    });
 
     const unavailableUsers = sharedUsers
       .filter((user) => Array.isArray(user.availabilityWindows) && user.availabilityWindows.length > 0)
@@ -235,7 +247,7 @@ exports.approveTime = async (req, res) => {
   try {
     const { time } = req.body;
     const approvedTime = new Date(time);
-    const meeting = await Meeting.findById(req.params.id);
+    const meeting = await Meeting.findByPk(req.params.id);
 
     if (!meeting) {
       return res.status(404).json({ msg: 'Meeting not found' });
@@ -259,7 +271,7 @@ exports.approveTime = async (req, res) => {
       approval.approvedBy.push(req.user.id);
     }
 
-    const requiredApprovals = meeting.attendees.length + 1;
+    const requiredApprovals = meeting.attendeeIds.length + 1;
     if (approval.approvedBy.length >= requiredApprovals) {
       meeting.confirmedTime = approvedTime;
     }
@@ -267,8 +279,9 @@ exports.approveTime = async (req, res) => {
     await meeting.save();
 
     if (meeting.confirmedTime) {
-      const participants = await User.find({
-        _id: { $in: [meeting.creator, ...meeting.attendees] },
+      const { Op } = require('sequelize');
+      const participants = await User.findAll({
+        where: { id: { [Op.in]: [meeting.creatorId, ...meeting.attendeeIds] } }
       });
 
       await Promise.all(
@@ -295,7 +308,7 @@ exports.approveTime = async (req, res) => {
 exports.sendMessage = async (req, res) => {
   try {
     const { text } = req.body;
-    const meeting = await Meeting.findById(req.params.id);
+    const meeting = await Meeting.findByPk(req.params.id);
 
     if (!meeting) {
       return res.status(404).json({ msg: 'Meeting not found' });
@@ -320,16 +333,22 @@ exports.sendMessage = async (req, res) => {
 
 exports.viewCalendar = async (req, res) => {
   try {
-    const meeting = await Meeting.findById(req.params.id).populate('attendees', 'googleAccessToken googleRefreshToken');
+    const { Op } = require('sequelize');
+    const meeting = await Meeting.findByPk(req.params.id);
     if (!meeting) {
       return res.status(404).json({ msg: 'Meeting not found' });
     }
+
+    const attendees = await User.findAll({
+      where: { id: { [Op.in]: meeting.attendeeIds } },
+      attributes: ['googleAccessToken', 'googleRefreshToken']
+    });
 
     if (!isParticipant(meeting, req.user.id)) {
       return res.status(403).json({ msg: 'Not authorized' });
     }
 
-    const user = await User.findById(req.user.id);
+    const user = await User.findByPk(req.user.id);
     if (!user?.googleAccessToken) {
       return res.status(400).json({ msg: 'Connect Google Calendar first' });
     }
@@ -357,17 +376,17 @@ exports.viewCalendar = async (req, res) => {
 exports.moveMeeting = async (req, res) => {
   try {
     const { newTime } = req.body;
-    const meeting = await Meeting.findById(req.params.id);
+    const meeting = await Meeting.findByPk(req.params.id);
 
     if (!meeting) {
       return res.status(404).json({ msg: 'Meeting not found' });
     }
 
-    if (!isObjectIdEqual(meeting.creator, req.user.id)) {
+    if (!isObjectIdEqual(meeting.creatorId, req.user.id)) {
       return res.status(403).json({ msg: 'Only creator can move meeting' });
     }
 
-    const creator = await User.findById(req.user.id);
+    const creator = await User.findByPk(req.user.id);
     if (!creator?.googleAccessToken || !meeting.calendarEventId) {
       meeting.confirmedTime = new Date(newTime);
       await meeting.save();

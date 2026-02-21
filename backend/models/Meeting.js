@@ -1,34 +1,46 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const { sequelize } = require('../config/database');
 
-const meetingSchema = new mongoose.Schema(
-  {
-    title: { type: String, required: true, trim: true },
-    creator: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    attendees: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-    proposedTimes: [
-      {
-        time: { type: Date, required: true },
-        proposedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-      },
-    ],
-    approvals: [
-      {
-        time: { type: Date, required: true },
-        approvedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-      },
-    ],
-    messages: [
-      {
-        user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-        text: { type: String, required: true },
-        date: { type: Date, default: Date.now },
-      },
-    ],
-    confirmedTime: Date,
-    googleMeetLink: String,
-    calendarEventId: String,
+const Meeting = sequelize.define('Meeting', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true
   },
-  { timestamps: true }
-);
+  title: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  creatorId: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: {
+      model: 'users',
+      key: 'id'
+    }
+  },
+  attendeeIds: {
+    type: DataTypes.ARRAY(DataTypes.UUID),
+    defaultValue: []
+  },
+  proposedTimes: {
+    type: DataTypes.JSONB,
+    defaultValue: []
+  },
+  approvals: {
+    type: DataTypes.JSONB,
+    defaultValue: []
+  },
+  messages: {
+    type: DataTypes.JSONB,
+    defaultValue: []
+  },
+  confirmedTime: DataTypes.DATE,
+  googleMeetLink: DataTypes.STRING,
+  calendarEventId: DataTypes.STRING
+}, {
+  timestamps: true,
+  tableName: 'meetings'
+});
 
-module.exports = mongoose.model('Meeting', meetingSchema);
+module.exports = Meeting;

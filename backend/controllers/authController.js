@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+const { Op } = require('sequelize');
 
 const User = require('../models/User');
 const transporter = require('../utils/mailer');
@@ -32,7 +33,11 @@ exports.register = async (req, res) => {
       return res.status(400).json({ msg: 'username, email, and password are required' });
     }
 
-    const existing = await User.findOne({ $or: [{ email }, { username }] });
+    const existing = await User.findOne({ 
+      where: { 
+        [Op.or]: [{ email }, { username }] 
+      } 
+    });
     if (existing) {
       return res.status(400).json({ msg: 'User with this email or username already exists' });
     }
@@ -40,14 +45,12 @@ exports.register = async (req, res) => {
     const hashedPw = await bcrypt.hash(password, 12);
     const token = crypto.randomBytes(20).toString('hex');
 
-    const user = new User({
+    const user = await User.create({
       username,
       email,
       password: hashedPw,
       verificationToken: token,
     });
-
-    await user.save();
 
     const verifyUrl = `${process.env.BACKEND_URL || 'http://localhost:5000'}/api/auth/verify/${token}`;
     await transporter.sendMail({
@@ -65,7 +68,9 @@ exports.register = async (req, res) => {
 
 exports.getAvailability = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('shareAvailability availabilityWindows');
+    const user = await User.findByPk(req.user.id, {
+      attributes: ['shareAvailability', 'availabilityWindows']
+    });
     if (!user) {
       return res.status(404).json({ msg: 'User not found' });
     }
@@ -81,7 +86,7 @@ exports.getAvailability = async (req, res) => {
 
 exports.updateAvailability = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await User.findByPk(req.user.id);
     if (!user) {
       return res.status(404).json({ msg: 'User not found' });
     }
@@ -108,7 +113,7 @@ exports.updateAvailability = async (req, res) => {
 
 exports.verify = async (req, res) => {
   try {
-    const user = await User.findOne({ verificationToken: req.params.token });
+    const user = await User.findOne({ where: { verificationToken: req.params.token } });
     if (!user) {
       return res.status(400).json({ msg: 'Invalid token' });
     }
@@ -126,18 +131,18 @@ exports.verify = async (req, res) => {
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ where: { email } });
 
     if (!user || !user.isVerified || !(await bcrypt.compare(password, user.password))) {
       return res.status(400).json({ msg: 'Invalid credentials' });
     }
 
-    const token = jwt.sign({ id: user._id.toString() }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
     return res.json({
       token,
       user: {
-        id: user._id,
+        id: user.id,
         username: user.username,
         email: user.email,
         shareAvailability: user.shareAvailability,
@@ -183,7 +188,7 @@ exports.googleCallback = async (req, res) => {
       return res.status(400).json({ msg: 'Missing callback state' });
     }
 
-    const user = await User.findById(userId);
+    const user = await User.findByPk(userId);
     if (!user) {
       return res.status(404).json({ msg: 'User not found' });
     }

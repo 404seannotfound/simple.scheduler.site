@@ -1,8 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import api from '../api';
-import { useAppSettings } from '../context/AppSettingsContext';
-import { formatDateTime } from '../utils/dateTime';
 
 const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -19,7 +17,6 @@ const MeetingForm = () => {
   const [newTime, setNewTime] = useState('');
   const [messageText, setMessageText] = useState('');
   const [message, setMessage] = useState('');
-  const { settings } = useAppSettings();
 
   const user = useMemo(() => {
     const raw = localStorage.getItem('user');
@@ -150,7 +147,10 @@ const MeetingForm = () => {
               {meeting.proposedTimes.map((pt, index) => (
                 <li key={`${pt.time}-${index}`}>
                   <div>
-                    {formatDateTime(pt.time, settings.preferences.dateFormat, settings.preferences.timezone)}
+                    <p className="muted">
+                      Proposed {new Date(pt.time).toLocaleString()} by{' '}
+                      {pt.proposedBy?.username || 'unknown'}
+                    </p>
                     <button onClick={() => approveTime(pt.time)}>Approve</button>
                   </div>
                 </li>

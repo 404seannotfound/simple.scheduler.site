@@ -1,8 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../api';
-import { useAppSettings } from '../context/AppSettingsContext';
-import { formatDateTime } from '../utils/dateTime';
 
 const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -41,7 +39,6 @@ const Dashboard = () => {
   const [availabilityRows, setAvailabilityRows] = useState(getDefaultAvailabilityRows);
   const [availabilityMessage, setAvailabilityMessage] = useState('');
   const navigate = useNavigate();
-  const { settings } = useAppSettings();
 
   const user = useMemo(() => {
     const raw = localStorage.getItem('user');
@@ -143,12 +140,10 @@ const Dashboard = () => {
     <div className="page dashboard-page">
       <div className="container">
         <header className="dashboard-header card">
-          <div>
-            {settings.branding.logoUrl && (
-              <img className="brand-logo" src={settings.branding.logoUrl} alt={`${settings.branding.companyName} logo`} />
-            )}
-            <h1>{user ? `${user.username}'s ${settings.branding.companyName}` : settings.branding.companyName}</h1>
-            <p className="muted">{settings.branding.templateText}</p>
+          <div className="availability-section">
+            <h2>Availability Preferences</h2>
+            {user ? `${user.username}'s` : ''} 
+            <p className="muted"></p>
           </div>
           <div className="header-actions">
             <button onClick={connectGoogle}>Connect Google Calendar</button>
@@ -233,12 +228,11 @@ const Dashboard = () => {
                     <strong>{meeting.title}</strong>
                     <p className="muted">
                       {meeting.confirmedTime
-                        ? `Confirmed: ${formatDateTime(
-                            meeting.confirmedTime,
-                            settings.preferences.dateFormat,
-                            settings.preferences.timezone
-                          )}`
+                        ? `Confirmed: ${new Date(meeting.confirmedTime).toLocaleString()}`
                         : 'Pending confirmation'}
+                    </p>
+                    <p className="muted">
+                      Updated {new Date(meeting.updatedAt).toLocaleString()}
                     </p>
                   </div>
                   <div className="meeting-actions">

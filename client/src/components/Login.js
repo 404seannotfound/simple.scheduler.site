@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../api';
-import { useAppSettings } from '../context/AppSettingsContext';
 
 const Login = () => {
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [message, setMessage] = useState('');
   const navigate = useNavigate();
-  const { settings } = useAppSettings();
 
   const onChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
@@ -27,12 +25,8 @@ const Login = () => {
   return (
     <div className="page auth-page">
       <form className="card form" onSubmit={onSubmit}>
-        {settings.branding.logoUrl && (
-          <img className="brand-logo" src={settings.branding.logoUrl} alt={`${settings.branding.companyName} logo`} />
-        )}
-        <p className="brand-kicker">{settings.branding.companyName}</p>
-        <h1>Welcome back</h1>
-        <p className="muted">{settings.branding.templateText}</p>
+        <h1>Login</h1>
+        <p className="muted">SimpleAnonymousScheduler</p>
         <input name="email" type="email" placeholder="Email" onChange={onChange} required />
         <input name="password" type="password" placeholder="Password" onChange={onChange} required />
         <button type="submit">Login</button>

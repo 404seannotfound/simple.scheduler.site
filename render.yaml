@@ -14,10 +14,12 @@ services:
         value: 5000
       - key: FRONTEND_URL
         value: https://simple-anonymous-scheduler-web.onrender.com
-      - key: MONGO_URI
-        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: simple-scheduler-db
+          property: connectionString
       - key: JWT_SECRET
-        sync: false
+        generateValue: true
       - key: EMAIL_USER
         sync: false
       - key: EMAIL_PASS
@@ -30,8 +32,6 @@ services:
         sync: false
       - key: BACKEND_URL
         value: https://simple-anonymous-scheduler-api.onrender.com
-      - key: ADMIN_SETUP_TOKEN
-        sync: false
 
   - type: web
     name: simple-anonymous-scheduler-web
@@ -48,3 +48,9 @@ services:
       - type: rewrite
         source: /*
         destination: /index.html
+
+databases:
+  - name: simple-scheduler-db
+    plan: free
+    databaseName: scheduler
+    user: scheduler

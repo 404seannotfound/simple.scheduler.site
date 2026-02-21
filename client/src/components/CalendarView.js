@@ -1,15 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import api from '../api';
-import { useAppSettings } from '../context/AppSettingsContext';
-import { formatDateTime } from '../utils/dateTime';
 
 const CalendarView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [busySlots, setBusySlots] = useState([]);
   const [message, setMessage] = useState('');
-  const { settings } = useAppSettings();
 
   useEffect(() => {
     if (!localStorage.getItem('token')) {
@@ -47,14 +44,14 @@ const CalendarView = () => {
           <ul className="stack-list">
             {busySlots.map((slot, idx) => (
               <li key={`${slot.start}-${idx}`}>
-                {formatDateTime(slot.start, settings.preferences.dateFormat, settings.preferences.timezone)} -{' '}
-                {formatDateTime(slot.end, settings.preferences.dateFormat, settings.preferences.timezone)}
+                Busy slots from {new Date(slot.start).toLocaleString()} to{' '}
+                {new Date(slot.end).toLocaleString()}
               </li>
             ))}
           </ul>
         )}
 
-        {settings.supportEmail && <p className="muted">Support: {settings.supportEmail}</p>}
+        <p className="muted">Need help? Contact support@example.com</p>
 
         <Link to={`/meeting/${id}`}>Back to meeting</Link>
       </div>
