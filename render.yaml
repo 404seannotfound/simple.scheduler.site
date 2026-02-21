@@ -1,0 +1,47 @@
+services:
+  - type: web
+    name: simple-anonymous-scheduler-api
+    env: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 18
+      - key: PORT
+        value: 5000
+      - key: FRONTEND_URL
+        value: https://simple-anonymous-scheduler-web.onrender.com
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_PASS
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: BACKEND_URL
+        sync: false
+
+  - type: static_site
+    name: simple-anonymous-scheduler-web
+    rootDir: client
+    buildCommand: npm install && npm run build
+    staticPublishPath: build
+    envVars:
+      - key: NODE_VERSION
+        value: 18
+      - key: REACT_APP_API_URL
+        value: https://simple-anonymous-scheduler-api.onrender.com/api
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
