@@ -53,14 +53,27 @@ exports.register = async (req, res) => {
     });
 
     const verifyUrl = `${process.env.BACKEND_URL || 'http://localhost:5000'}/api/auth/verify/${token}`;
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject: 'Verify Your Email',
-      text: `Click to verify your email: ${verifyUrl}`,
-    });
+    
+    // Send email but don't block registration if email fails
+    try {
+      if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+        await transporter.sendMail({
+          from: process.env.EMAIL_USER,
+          to: email,
+          subject: 'Verify Your Email',
+          text: `Click to verify your email: ${verifyUrl}`,
+        });
+      } else {
+        console.warn('Email credentials not configured, skipping verification email');
+      }
+    } catch (emailErr) {
+      console.error('Failed to send verification email:', emailErr.message);
+    }
 
-    return res.status(201).json({ msg: 'Verification email sent' });
+    return res.status(201).json({ 
+      msg: 'Registration successful. Check your email for verification link.',
+      verifyUrl: process.env.NODE_ENV !== 'production' ? verifyUrl : undefined
+    });
   } catch (err) {
     return res.status(500).json({ msg: 'Registration failed', error: err.message });
   }
