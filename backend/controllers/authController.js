@@ -45,14 +45,8 @@ exports.register = async (req, res) => {
     const hashedPw = await bcrypt.hash(password, 12);
     const token = crypto.randomBytes(20).toString('hex');
 
-    const user = await User.create({
-      username,
-      email,
-      password: hashedPw,
-      verificationToken: token,
-    });
-
     const verifyUrl = `${process.env.BACKEND_URL || 'http://localhost:5000'}/api/auth/verify/${token}`;
+    let emailSent = false;
     
     // Send email but don't block registration if email fails
     try {
@@ -63,16 +57,28 @@ exports.register = async (req, res) => {
           subject: 'Verify Your Email',
           text: `Click to verify your email: ${verifyUrl}`,
         });
+        emailSent = true;
       } else {
-        console.warn('Email credentials not configured, skipping verification email');
+        console.warn('Email credentials not configured, auto-verifying user');
       }
     } catch (emailErr) {
       console.error('Failed to send verification email:', emailErr.message);
     }
 
+    // Auto-verify if email not sent (allows immediate login)
+    const user = await User.create({
+      username,
+      email,
+      password: hashedPw,
+      verificationToken: emailSent ? token : null,
+      isVerified: !emailSent,
+    });
+
     return res.status(201).json({ 
-      msg: 'Registration successful. Check your email for verification link.',
-      verifyUrl: process.env.NODE_ENV !== 'production' ? verifyUrl : undefined
+      msg: emailSent 
+        ? 'Registration successful. Check your email for verification link.'
+        : 'Registration successful. You can now login.',
+      verifyUrl: process.env.NODE_ENV !== 'production' && emailSent ? verifyUrl : undefined
     });
   } catch (err) {
     return res.status(500).json({ msg: 'Registration failed', error: err.message });
