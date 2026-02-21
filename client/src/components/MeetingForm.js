@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import api from '../api';
 
@@ -25,7 +25,7 @@ const MeetingForm = () => {
 
   const isCreator = user && meeting && meeting.creator && String(meeting.creator._id || meeting.creator) === String(user.id);
 
-  const loadMeeting = async () => {
+  const loadMeeting = useCallback(async () => {
     try {
       const res = await api.get(`/meetings/${id}`);
       setMeeting(res.data);
@@ -33,7 +33,7 @@ const MeetingForm = () => {
     } catch (err) {
       setMessage(err.response?.data?.msg || 'Failed to load meeting');
     }
-  };
+  }, [id]);
 
   useEffect(() => {
     if (!localStorage.getItem('token')) {
@@ -41,8 +41,7 @@ const MeetingForm = () => {
       return;
     }
     loadMeeting();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, navigate]);
+  }, [navigate, loadMeeting]);
 
   const proposeTime = async (e) => {
     e.preventDefault();
