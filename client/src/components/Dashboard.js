@@ -244,7 +244,6 @@ const Dashboard = () => {
             </ul>
           )}
         </section>
-        {settings.supportEmail && <p className="muted">Support: {settings.supportEmail}</p>}
       </div>
     </div>
   );
