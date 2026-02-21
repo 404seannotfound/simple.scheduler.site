@@ -48,21 +48,28 @@ exports.register = async (req, res) => {
     const verifyUrl = `${process.env.BACKEND_URL || 'http://localhost:5000'}/api/auth/verify/${token}`;
     let emailSent = false;
     
-    // Send email but don't block registration if email fails
-    try {
-      if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-        await transporter.sendMail({
-          from: process.env.EMAIL_USER,
-          to: email,
-          subject: 'Verify Your Email',
-          text: `Click to verify your email: ${verifyUrl}`,
-        });
+    // Try sending email with 5-second timeout, don't block registration
+    if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+      const emailPromise = transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: email,
+        subject: 'Verify Your Email',
+        text: `Click to verify your email: ${verifyUrl}`,
+      });
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Email timeout')), 5000)
+      );
+      
+      try {
+        await Promise.race([emailPromise, timeoutPromise]);
         emailSent = true;
-      } else {
-        console.warn('Email credentials not configured, auto-verifying user');
+        console.log('Verification email sent successfully');
+      } catch (emailErr) {
+        console.warn('Failed to send verification email, auto-verifying user:', emailErr.message);
       }
-    } catch (emailErr) {
-      console.error('Failed to send verification email:', emailErr.message);
+    } else {
+      console.warn('Email credentials not configured, auto-verifying user');
     }
 
     // Auto-verify if email not sent (allows immediate login)
