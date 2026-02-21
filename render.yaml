@@ -29,6 +29,8 @@ services:
       - key: GOOGLE_REDIRECT_URI
         sync: false
       - key: BACKEND_URL
+        value: https://simple-anonymous-scheduler-api.onrender.com
+      - key: ADMIN_SETUP_TOKEN
         sync: false
 
   - type: static_site

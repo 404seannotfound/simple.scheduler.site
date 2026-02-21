@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Scheduler Admin Utility</title>
+    <style>
+      :root {
+        --bg: #f6f8fb;
+        --panel: #ffffff;
+        --text: #172137;
+        --muted: #5b667f;
+        --primary: #0b7285;
+        --border: #d7deec;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        background: radial-gradient(circle at top right, #deedf9 0%, var(--bg) 45%);
+        color: var(--text);
+      }
+      .wrap {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 28px 18px 40px;
+        display: grid;
+        gap: 16px;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 16px;
+        box-shadow: 0 10px 30px rgba(20, 36, 66, 0.08);
+      }
+      h1, h2 { margin: 0 0 10px; }
+      p { margin: 4px 0; }
+      .muted { color: var(--muted); }
+      .grid {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+      label {
+        display: grid;
+        gap: 6px;
+        font-size: 14px;
+      }
+      input, textarea, button {
+        font: inherit;
+      }
+      input, textarea {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px;
+      }
+      textarea { min-height: 88px; resize: vertical; }
+      button {
+        border: 0;
+        border-radius: 10px;
+        padding: 10px 14px;
+        background: var(--primary);
+        color: #fff;
+        cursor: pointer;
+      }
+      pre {
+        margin: 0;
+        overflow: auto;
+        background: #f4f7ff;
+        border: 1px solid var(--border);
+        padding: 10px;
+        border-radius: 10px;
+      }
+      .status { color: #0f7a2c; font-weight: 600; }
+      .error { color: #af2222; font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <section class="card">
+        <h1>SimpleAnonymousScheduler Admin Utility</h1>
+        <p class="muted">Root utility page for service health, bootstrap, and runtime settings.</p>
+      </section>
+
+      <section class="card">
+        <h2>Health</h2>
+        <button id="refreshHealth">Refresh Health</button>
+        <pre id="healthOutput">Loading...</pre>
+      </section>
+
+      <section class="card">
+        <h2>First Deploy Bootstrap</h2>
+        <p class="muted">Run once after Render deploy. Use your <code>ADMIN_SETUP_TOKEN</code>.</p>
+        <div class="grid">
+          <label>
+            Setup Token
+            <input id="setupToken" type="password" placeholder="ADMIN_SETUP_TOKEN" />
+          </label>
+          <label>
+            New Admin Token (optional)
+            <input id="newAdminToken" type="text" placeholder="Leave blank to auto-generate" />
+          </label>
+        </div>
+        <button id="bootstrapBtn">Run Bootstrap</button>
+        <p id="bootstrapStatus" class="muted"></p>
+      </section>
+
+      <section class="card">
+        <h2>Settings</h2>
+        <div class="grid">
+          <label>
+            Admin Token
+            <input id="adminToken" type="password" placeholder="x-admin-token" />
+          </label>
+          <label>
+            Company Name
+            <input id="companyName" type="text" />
+          </label>
+          <label>
+            Logo URL
+            <input id="logoUrl" type="text" />
+          </label>
+          <label>
+            Date Format
+            <input id="dateFormat" type="text" placeholder="MM/dd/yyyy" />
+          </label>
+          <label>
+            Timezone
+            <input id="timezone" type="text" placeholder="UTC" />
+          </label>
+          <label>
+            Support Email
+            <input id="supportEmail" type="email" />
+          </label>
+        </div>
+        <label>
+          Template Text
+          <textarea id="templateText"></textarea>
+        </label>
+        <div style="display:flex; gap:10px; margin-top:10px;">
+          <button id="loadSettings">Load Settings</button>
+          <button id="saveSettings">Save Settings</button>
+        </div>
+        <p id="settingsStatus" class="muted"></p>
+      </section>
+    </div>
+
+    <script>
+      const healthOutput = document.getElementById('healthOutput');
+      const bootstrapStatus = document.getElementById('bootstrapStatus');
+      const settingsStatus = document.getElementById('settingsStatus');
+
+      async function readJson(url, options) {
+        const res = await fetch(url, options);
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.msg || 'Request failed');
+        }
+        return data;
+      }
+
+      async function refreshHealth() {
+        healthOutput.textContent = 'Loading...';
+        try {
+          const data = await readJson('/api/admin/health');
+          healthOutput.textContent = JSON.stringify(data, null, 2);
+        } catch (err) {
+          healthOutput.textContent = err.message;
+        }
+      }
+
+      function setSettingsForm(data) {
+        document.getElementById('companyName').value = data.branding?.companyName || '';
+        document.getElementById('logoUrl').value = data.branding?.logoUrl || '';
+        document.getElementById('templateText').value = data.branding?.templateText || '';
+        document.getElementById('dateFormat').value = data.preferences?.dateFormat || '';
+        document.getElementById('timezone').value = data.preferences?.timezone || '';
+        document.getElementById('supportEmail').value = data.supportEmail || '';
+      }
+
+      async function bootstrap() {
+        bootstrapStatus.textContent = '';
+        bootstrapStatus.className = 'muted';
+        try {
+          const setupToken = document.getElementById('setupToken').value;
+          const adminToken = document.getElementById('newAdminToken').value;
+          const data = await readJson('/api/admin/bootstrap', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-setup-token': setupToken,
+            },
+            body: JSON.stringify({ adminToken }),
+          });
+          bootstrapStatus.textContent = `Bootstrap complete. Admin token: ${data.adminToken}`;
+          bootstrapStatus.className = 'status';
+        } catch (err) {
+          bootstrapStatus.textContent = err.message;
+          bootstrapStatus.className = 'error';
+        }
+      }
+
+      async function loadSettings() {
+        settingsStatus.textContent = '';
+        settingsStatus.className = 'muted';
+        try {
+          const adminToken = document.getElementById('adminToken').value;
+          const data = await readJson('/api/admin/settings', {
+            headers: { 'x-admin-token': adminToken },
+          });
+          setSettingsForm(data);
+          settingsStatus.textContent = 'Settings loaded.';
+          settingsStatus.className = 'status';
+        } catch (err) {
+          settingsStatus.textContent = err.message;
+          settingsStatus.className = 'error';
+        }
+      }
+
+      async function saveSettings() {
+        settingsStatus.textContent = '';
+        settingsStatus.className = 'muted';
+        try {
+          const adminToken = document.getElementById('adminToken').value;
+          const payload = {
+            companyName: document.getElementById('companyName').value,
+            logoUrl: document.getElementById('logoUrl').value,
+            templateText: document.getElementById('templateText').value,
+            dateFormat: document.getElementById('dateFormat').value,
+            timezone: document.getElementById('timezone').value,
+            supportEmail: document.getElementById('supportEmail').value,
+          };
+
+          await readJson('/api/admin/settings', {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-admin-token': adminToken,
+            },
+            body: JSON.stringify(payload),
+          });
+
+          settingsStatus.textContent = 'Settings saved.';
+          settingsStatus.className = 'status';
+        } catch (err) {
+          settingsStatus.textContent = err.message;
+          settingsStatus.className = 'error';
+        }
+      }
+
+      document.getElementById('refreshHealth').addEventListener('click', refreshHealth);
+      document.getElementById('bootstrapBtn').addEventListener('click', bootstrap);
+      document.getElementById('loadSettings').addEventListener('click', loadSettings);
+      document.getElementById('saveSettings').addEventListener('click', saveSettings);
+
+      refreshHealth();
+    </script>
+  </body>
+</html>

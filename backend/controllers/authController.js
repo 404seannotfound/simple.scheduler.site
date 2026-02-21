@@ -6,6 +6,24 @@ const User = require('../models/User');
 const transporter = require('../utils/mailer');
 const { createOAuthClient } = require('../utils/googleClient');
 
+const VALID_TIME_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+function normalizeAvailabilityWindows(inputWindows) {
+  if (!Array.isArray(inputWindows)) {
+    return [];
+  }
+
+  return inputWindows
+    .map((window) => ({
+      dayOfWeek: Number(window.dayOfWeek),
+      startTime: String(window.startTime || '').trim(),
+      endTime: String(window.endTime || '').trim(),
+    }))
+    .filter((window) => Number.isInteger(window.dayOfWeek) && window.dayOfWeek >= 0 && window.dayOfWeek <= 6)
+    .filter((window) => VALID_TIME_REGEX.test(window.startTime) && VALID_TIME_REGEX.test(window.endTime))
+    .filter((window) => window.startTime < window.endTime);
+}
+
 exports.register = async (req, res) => {
   try {
     const { username, email, password } = req.body;
@@ -45,6 +63,49 @@ exports.register = async (req, res) => {
   }
 };
 
+exports.getAvailability = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('shareAvailability availabilityWindows');
+    if (!user) {
+      return res.status(404).json({ msg: 'User not found' });
+    }
+
+    return res.json({
+      shareAvailability: Boolean(user.shareAvailability),
+      availabilityWindows: user.availabilityWindows || [],
+    });
+  } catch (err) {
+    return res.status(500).json({ msg: 'Failed to fetch availability settings', error: err.message });
+  }
+};
+
+exports.updateAvailability = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ msg: 'User not found' });
+    }
+
+    if (typeof req.body.shareAvailability === 'boolean') {
+      user.shareAvailability = req.body.shareAvailability;
+    }
+
+    if (Array.isArray(req.body.availabilityWindows)) {
+      user.availabilityWindows = normalizeAvailabilityWindows(req.body.availabilityWindows);
+    }
+
+    await user.save();
+
+    return res.json({
+      msg: 'Availability updated',
+      shareAvailability: Boolean(user.shareAvailability),
+      availabilityWindows: user.availabilityWindows || [],
+    });
+  } catch (err) {
+    return res.status(500).json({ msg: 'Failed to update availability settings', error: err.message });
+  }
+};
+
 exports.verify = async (req, res) => {
   try {
     const user = await User.findOne({ verificationToken: req.params.token });
@@ -79,6 +140,8 @@ exports.login = async (req, res) => {
         id: user._id,
         username: user.username,
         email: user.email,
+        shareAvailability: user.shareAvailability,
+        availabilityWindows: user.availabilityWindows,
       },
     });
   } catch (err) {

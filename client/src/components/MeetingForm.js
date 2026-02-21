@@ -1,6 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import api from '../api';
+import { useAppSettings } from '../context/AppSettingsContext';
+import { formatDateTime } from '../utils/dateTime';
+
+const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function formatWindow(window) {
+  const dayLabel = WEEKDAY_LABELS[window.dayOfWeek] || `Day ${window.dayOfWeek}`;
+  return `${dayLabel}: ${window.startTime}-${window.endTime} (UTC)`;
+}
 
 const MeetingForm = () => {
   const { id } = useParams();
@@ -10,6 +19,7 @@ const MeetingForm = () => {
   const [newTime, setNewTime] = useState('');
   const [messageText, setMessageText] = useState('');
   const [message, setMessage] = useState('');
+  const { settings } = useAppSettings();
 
   const user = useMemo(() => {
     const raw = localStorage.getItem('user');
@@ -103,7 +113,11 @@ const MeetingForm = () => {
           )}
           <p className="muted">
             {meeting.confirmedTime
-              ? `Confirmed for ${new Date(meeting.confirmedTime).toLocaleString()}`
+              ? `Confirmed for ${formatDateTime(
+                  meeting.confirmedTime,
+                  settings.preferences.dateFormat,
+                  settings.preferences.timezone
+                )}`
               : 'No confirmed time yet'}
           </p>
           <Link to="/dashboard">Back to dashboard</Link>
@@ -111,12 +125,32 @@ const MeetingForm = () => {
 
         <section className="card">
           <h2>Proposed times</h2>
+          {meeting.sharedAvailability?.length ? (
+            <div className="shared-availability">
+              <p className="muted">Shared availability (opted-in participants only):</p>
+              <ul className="stack-list">
+                {meeting.sharedAvailability.map((entry) => (
+                  <li key={entry.userId}>
+                    <strong>{entry.username}</strong>
+                    <ul>
+                      {(entry.availabilityWindows || []).map((window, idx) => (
+                        <li key={`${entry.userId}-${idx}`}>{formatWindow(window)}</li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="muted">No participants are sharing availability windows right now.</p>
+          )}
+
           {meeting.proposedTimes?.length ? (
             <ul className="stack-list">
               {meeting.proposedTimes.map((pt, index) => (
                 <li key={`${pt.time}-${index}`}>
                   <div>
-                    {new Date(pt.time).toLocaleString()}
+                    {formatDateTime(pt.time, settings.preferences.dateFormat, settings.preferences.timezone)}
                     <button onClick={() => approveTime(pt.time)}>Approve</button>
                   </div>
                 </li>
@@ -178,6 +212,7 @@ const MeetingForm = () => {
         )}
 
         {message && <p className="muted">{message}</p>}
+        {settings.supportEmail && <p className="muted">Support: {settings.supportEmail}</p>}
       </div>
     </div>
   );

@@ -1,6 +1,35 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../api';
+import { useAppSettings } from '../context/AppSettingsContext';
+import { formatDateTime } from '../utils/dateTime';
+
+const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function getDefaultAvailabilityRows() {
+  return WEEKDAY_LABELS.map((label, dayOfWeek) => ({
+    dayOfWeek,
+    label,
+    enabled: false,
+    startTime: '09:00',
+    endTime: '17:00',
+  }));
+}
+
+function buildRowsFromWindows(windows) {
+  const rows = getDefaultAvailabilityRows();
+  (windows || []).forEach((window) => {
+    if (Number.isInteger(window.dayOfWeek) && window.dayOfWeek >= 0 && window.dayOfWeek <= 6) {
+      rows[window.dayOfWeek] = {
+        ...rows[window.dayOfWeek],
+        enabled: true,
+        startTime: window.startTime || rows[window.dayOfWeek].startTime,
+        endTime: window.endTime || rows[window.dayOfWeek].endTime,
+      };
+    }
+  });
+  return rows;
+}
 
 const Dashboard = () => {
   const [meetings, setMeetings] = useState([]);
@@ -8,7 +37,11 @@ const Dashboard = () => {
   const [attendeesEmails, setAttendeesEmails] = useState('');
   const [googleMeetLink, setGoogleMeetLink] = useState('');
   const [message, setMessage] = useState('');
+  const [shareAvailability, setShareAvailability] = useState(false);
+  const [availabilityRows, setAvailabilityRows] = useState(getDefaultAvailabilityRows);
+  const [availabilityMessage, setAvailabilityMessage] = useState('');
   const navigate = useNavigate();
+  const { settings } = useAppSettings();
 
   const user = useMemo(() => {
     const raw = localStorage.getItem('user');
@@ -23,8 +56,13 @@ const Dashboard = () => {
 
     const loadMeetings = async () => {
       try {
-        const res = await api.get('/meetings');
-        setMeetings(res.data || []);
+        const [meetingsRes, availabilityRes] = await Promise.all([
+          api.get('/meetings'),
+          api.get('/auth/availability'),
+        ]);
+        setMeetings(meetingsRes.data || []);
+        setShareAvailability(Boolean(availabilityRes.data?.shareAvailability));
+        setAvailabilityRows(buildRowsFromWindows(availabilityRes.data?.availabilityWindows || []));
       } catch (err) {
         setMessage(err.response?.data?.msg || 'Failed to fetch meetings');
       }
@@ -72,13 +110,45 @@ const Dashboard = () => {
     navigate('/login');
   };
 
+  const updateAvailabilityRow = (dayOfWeek, changes) => {
+    setAvailabilityRows((prev) =>
+      prev.map((row) => (row.dayOfWeek === dayOfWeek ? { ...row, ...changes } : row))
+    );
+  };
+
+  const saveAvailability = async () => {
+    setAvailabilityMessage('');
+
+    try {
+      const availabilityWindows = availabilityRows
+        .filter((row) => row.enabled)
+        .map((row) => ({
+          dayOfWeek: row.dayOfWeek,
+          startTime: row.startTime,
+          endTime: row.endTime,
+        }));
+
+      await api.put('/auth/availability', {
+        shareAvailability,
+        availabilityWindows,
+      });
+
+      setAvailabilityMessage('Availability preferences saved.');
+    } catch (err) {
+      setAvailabilityMessage(err.response?.data?.msg || 'Failed to save availability preferences');
+    }
+  };
+
   return (
     <div className="page dashboard-page">
       <div className="container">
         <header className="dashboard-header card">
           <div>
-            <h1>{user ? `${user.username}'s Dashboard` : 'Dashboard'}</h1>
-            <p className="muted">Create and coordinate meetings with approvals.</p>
+            {settings.branding.logoUrl && (
+              <img className="brand-logo" src={settings.branding.logoUrl} alt={`${settings.branding.companyName} logo`} />
+            )}
+            <h1>{user ? `${user.username}'s ${settings.branding.companyName}` : settings.branding.companyName}</h1>
+            <p className="muted">{settings.branding.templateText}</p>
           </div>
           <div className="header-actions">
             <button onClick={connectGoogle}>Connect Google Calendar</button>
@@ -111,6 +181,47 @@ const Dashboard = () => {
         </form>
 
         <section className="card">
+          <h2>My availability</h2>
+          <label className="availability-share-toggle">
+            <input
+              type="checkbox"
+              checked={shareAvailability}
+              onChange={(e) => setShareAvailability(e.target.checked)}
+            />
+            Share my available times with meeting participants
+          </label>
+
+          <div className="availability-grid">
+            {availabilityRows.map((row) => (
+              <div className="availability-row" key={row.dayOfWeek}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={row.enabled}
+                    onChange={(e) => updateAvailabilityRow(row.dayOfWeek, { enabled: e.target.checked })}
+                  />
+                  {row.label}
+                </label>
+                <input
+                  type="time"
+                  value={row.startTime}
+                  onChange={(e) => updateAvailabilityRow(row.dayOfWeek, { startTime: e.target.value })}
+                  disabled={!row.enabled}
+                />
+                <input
+                  type="time"
+                  value={row.endTime}
+                  onChange={(e) => updateAvailabilityRow(row.dayOfWeek, { endTime: e.target.value })}
+                  disabled={!row.enabled}
+                />
+              </div>
+            ))}
+          </div>
+          <button onClick={saveAvailability}>Save availability settings</button>
+          {availabilityMessage && <p className="muted">{availabilityMessage}</p>}
+        </section>
+
+        <section className="card">
           <h2>Your meetings</h2>
           {meetings.length === 0 ? (
             <p className="muted">No meetings yet.</p>
@@ -122,7 +233,11 @@ const Dashboard = () => {
                     <strong>{meeting.title}</strong>
                     <p className="muted">
                       {meeting.confirmedTime
-                        ? `Confirmed: ${new Date(meeting.confirmedTime).toLocaleString()}`
+                        ? `Confirmed: ${formatDateTime(
+                            meeting.confirmedTime,
+                            settings.preferences.dateFormat,
+                            settings.preferences.timezone
+                          )}`
                         : 'Pending confirmation'}
                     </p>
                   </div>
@@ -135,6 +250,7 @@ const Dashboard = () => {
             </ul>
           )}
         </section>
+        {settings.supportEmail && <p className="muted">Support: {settings.supportEmail}</p>}
       </div>
     </div>
   );

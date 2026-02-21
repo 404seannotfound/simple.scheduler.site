@@ -9,6 +9,14 @@ const userSchema = new mongoose.Schema(
     verificationToken: String,
     googleAccessToken: String,
     googleRefreshToken: String,
+    shareAvailability: { type: Boolean, default: false },
+    availabilityWindows: [
+      {
+        dayOfWeek: { type: Number, min: 0, max: 6, required: true },
+        startTime: { type: String, required: true },
+        endTime: { type: String, required: true },
+      },
+    ],
   },
   { timestamps: true }
 );

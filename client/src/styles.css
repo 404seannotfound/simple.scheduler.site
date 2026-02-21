@@ -57,6 +57,23 @@ a {
   width: min(460px, 100%);
 }
 
+.brand-logo {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.brand-kicker {
+  margin: 0;
+  color: var(--accent);
+  letter-spacing: 0.03em;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 12px;
+}
+
 input,
 button {
   font: inherit;
@@ -132,6 +149,31 @@ button.secondary {
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 12px;
+}
+
+.availability-share-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.availability-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.availability-row {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.availability-row label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .muted {

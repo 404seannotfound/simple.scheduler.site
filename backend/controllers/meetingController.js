@@ -18,6 +18,34 @@ function isParticipant(meeting, userId) {
   );
 }
 
+function getUtcDayAndTime(date) {
+  const dayOfWeek = date.getUTCDay();
+  const hh = String(date.getUTCHours()).padStart(2, '0');
+  const mm = String(date.getUTCMinutes()).padStart(2, '0');
+  return { dayOfWeek, time: `${hh}:${mm}` };
+}
+
+function isWithinSharedAvailability(user, date) {
+  if (!user?.shareAvailability) {
+    return true;
+  }
+
+  const windows = Array.isArray(user.availabilityWindows) ? user.availabilityWindows : [];
+  if (windows.length === 0) {
+    return true;
+  }
+
+  const { dayOfWeek, time } = getUtcDayAndTime(date);
+  return windows.some(
+    (window) =>
+      Number(window.dayOfWeek) === dayOfWeek &&
+      typeof window.startTime === 'string' &&
+      typeof window.endTime === 'string' &&
+      window.startTime <= time &&
+      time < window.endTime
+  );
+}
+
 async function sendSimpleEmail(to, subject, text) {
   if (!to || !process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
     return;
@@ -95,7 +123,25 @@ exports.getMeeting = async (req, res) => {
       return res.status(403).json({ msg: 'Not authorized for this meeting' });
     }
 
-    return res.json(meeting);
+    const participantIds = [meeting.creator._id, ...meeting.attendees.map((attendee) => attendee._id)];
+    const sharedUsers = await User.find(
+      {
+        _id: { $in: participantIds },
+        shareAvailability: true,
+        'availabilityWindows.0': { $exists: true },
+      },
+      'username email availabilityWindows'
+    );
+
+    const meetingData = meeting.toObject();
+    meetingData.sharedAvailability = sharedUsers.map((user) => ({
+      userId: user._id,
+      username: user.username,
+      email: user.email,
+      availabilityWindows: user.availabilityWindows,
+    }));
+
+    return res.json(meetingData);
   } catch (err) {
     return res.status(500).json({ msg: 'Failed to fetch meeting', error: err.message });
   }
@@ -138,6 +184,11 @@ exports.createMeeting = async (req, res) => {
 exports.proposeTime = async (req, res) => {
   try {
     const { time } = req.body;
+    const proposedTime = new Date(time);
+    if (Number.isNaN(proposedTime.getTime())) {
+      return res.status(400).json({ msg: 'Invalid proposed time' });
+    }
+
     const meeting = await Meeting.findById(req.params.id);
 
     if (!meeting) {
@@ -148,8 +199,28 @@ exports.proposeTime = async (req, res) => {
       return res.status(403).json({ msg: 'Not authorized' });
     }
 
+    const participantIds = [meeting.creator, ...meeting.attendees];
+    const sharedUsers = await User.find(
+      {
+        _id: { $in: participantIds },
+        shareAvailability: true,
+      },
+      'username availabilityWindows shareAvailability'
+    );
+
+    const unavailableUsers = sharedUsers
+      .filter((user) => Array.isArray(user.availabilityWindows) && user.availabilityWindows.length > 0)
+      .filter((user) => !isWithinSharedAvailability(user, proposedTime))
+      .map((user) => user.username);
+
+    if (unavailableUsers.length > 0) {
+      return res.status(400).json({
+        msg: `Proposed time is outside shared availability for: ${unavailableUsers.join(', ')}`,
+      });
+    }
+
     meeting.proposedTimes.push({
-      time: new Date(time),
+      time: proposedTime,
       proposedBy: req.user.id,
     });
     await meeting.save();
